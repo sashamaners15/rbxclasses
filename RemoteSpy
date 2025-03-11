@@ -1,0 +1,65 @@
+if getgenv().RemoteSpyActive then
+    return
+else
+    getgenv().RemoteSpyActive = true
+end
+
+if not getgenv().RemoteSpyCallbacks then
+    getgenv().RemoteSpyCallbacks = {}
+end
+
+local Methods = {
+    Connect = function(Callbacks)
+        getgenv().RemoteSpyCallbacks = Callbacks
+        getgenv().RemoteSpyHooked = true
+    end,
+
+    Disconnect = function()
+        getgenv().RemoteSpyCallbacks = {}
+        getgenv().RemoteSpyHooked = false
+    end
+};
+
+local mt = getrawmetatable(game)
+local oldNamecall = mt.__namecall
+setreadonly(mt, false)
+
+local function isIgnored(ignoreList, remoteName)
+    return table.find(ignoreList, remoteName) ~= nil
+end
+
+local function isIncluded(includeList, remoteName)
+    return #includeList == 0 or table.find(includeList, remoteName) ~= nil
+end
+
+mt.__namecall = newcclosure(function(self, ...)
+    if not getgenv().RemoteSpyHooked then
+        return oldNamecall(self, ...)
+    end
+    local Args = {...}
+    local method = getnamecallmethod()
+    local Ignore = getgenv().RemoteSpyCallbacks.Ignore or {}
+    local Include = getgenv().RemoteSpyCallbacks.Include or {}
+    local FireServerIgnore = Ignore.FireServer or {}
+    local InvokeServerIgnore = Ignore.InvokeServer or {}
+    local FireServerInclude = Include.FireServer or {}
+    local InvokeServerInclude = Include.InvokeServer or {}
+
+    if method == "FireServer" and getgenv().RemoteSpyCallbacks.FireServer then
+        if not isIgnored(FireServerIgnore, self.Name) and isIncluded(FireServerInclude, self.Name) then
+            getgenv().RemoteSpyCallbacks.FireServer(Args)
+        end
+    elseif method == "InvokeServer" and getgenv().RemoteSpyCallbacks.InvokeServer then
+        if not isIgnored(InvokeServerIgnore, self.Name) and isIncluded(InvokeServerInclude, self.Name) then
+            getgenv().RemoteSpyCallbacks.InvokeServer(Args)
+        end
+    end
+    
+    return oldNamecall(self, ...)
+end)
+
+setreadonly(mt, true)
+
+getgenv().RemoteSpy = Methods
+
+return Methods
